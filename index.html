@@ -1,0 +1,363 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hotel Booking Trends | Data Report</title>
+  <meta name="description" content="An exploratory analysis of hotel booking patterns and cancellations." />
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --ink: #172033;
+      --muted: #667085;
+      --paper: #f5f7fb;
+      --card: #ffffff;
+      --line: #e6eaf1;
+      --blue: #4263eb;
+      --blue-soft: #edf1ff;
+      --red: #e05a67;
+      --green: #199b78;
+      --gold: #d69e36;
+      --shadow: 0 8px 28px rgba(25, 39, 70, .06);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+    .wrap { width: min(1160px, calc(100% - 36px)); margin: 0 auto; }
+    header {
+      color: white;
+      background: linear-gradient(120deg, #182848 0%, #314d91 58%, #4263eb 100%);
+      padding: 48px 0 42px;
+    }
+    .eyebrow { text-transform: uppercase; letter-spacing: .13em; font-size: .74rem; font-weight: 750; opacity: .8; }
+    h1 { margin: 10px 0 10px; font-size: clamp(2rem, 5vw, 3.25rem); line-height: 1.08; letter-spacing: -.04em; }
+    header p { max-width: 720px; margin: 0; color: #e1e8ff; font-size: 1.05rem; }
+    main { padding: 28px 0 60px; }
+    .toolbar { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:20px; }
+    .status { color:var(--muted); font-size:.9rem; }
+    .upload {
+      display:inline-flex; align-items:center; gap:8px; border:1px solid #d8deeb;
+      border-radius:10px; padding:9px 13px; background:#fff; color:var(--ink);
+      font:inherit; font-size:.88rem; font-weight:650; cursor:pointer;
+    }
+    .upload:hover { border-color:var(--blue); color:var(--blue); }
+    input[type=file] { display:none; }
+    .notice { display:none; background:#fff8e8; border:1px solid #f2d99d; color:#805b13; border-radius:12px; padding:12px 15px; margin-bottom:18px; font-size:.9rem; }
+    .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:15px; margin-bottom:20px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); }
+    .kpi { padding:19px 20px; }
+    .kpi-label { color:var(--muted); font-size:.84rem; font-weight:600; }
+    .kpi-value { margin-top:7px; font-size:clamp(1.55rem,3vw,2.1rem); font-weight:780; letter-spacing:-.04em; }
+    .kpi-note { color:var(--muted); font-size:.78rem; margin-top:3px; }
+    .section-title { margin:30px 0 13px; }
+    .section-title h2 { margin:0; font-size:1.28rem; letter-spacing:-.02em; }
+    .section-title p { margin:4px 0 0; color:var(--muted); font-size:.9rem; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+    .chart-card { padding:20px; min-height:340px; }
+    .chart-head { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:14px; }
+    .chart-head h3 { margin:0; font-size:1rem; }
+    .chart-head p { margin:4px 0 0; color:var(--muted); font-size:.82rem; }
+    .chart-wrap { position:relative; height:245px; }
+    .insight { margin-top:16px; padding:15px 17px; border-radius:13px; background:var(--blue-soft); color:#263b86; font-size:.91rem; }
+    .insight strong { color:#1c2f72; }
+    .bottom-grid { display:grid; grid-template-columns:1.1fr .9fr; gap:16px; margin-top:16px; }
+    .text-card { padding:22px; }
+    .text-card h3 { margin:0 0 10px; font-size:1.02rem; }
+    .text-card p { color:var(--muted); margin:0 0 10px; font-size:.91rem; }
+    .findings { margin:0; padding-left:19px; }
+    .findings li { margin:8px 0; font-size:.91rem; }
+    .table-wrap { overflow-x:auto; }
+    table { border-collapse:collapse; width:100%; font-size:.86rem; }
+    th,td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--line); }
+    th { color:var(--muted); font-weight:650; }
+    td:last-child, th:last-child { text-align:right; }
+    footer { color:var(--muted); font-size:.8rem; padding:20px 0 35px; }
+    .error { color:#a52d3b; background:#fff0f1; border:1px solid #f3c5ca; border-radius:12px; padding:14px 16px; }
+    @media (max-width: 800px) { .kpis { grid-template-columns:repeat(2,1fr); } .grid,.bottom-grid { grid-template-columns:1fr; } }
+    @media (max-width: 480px) { .wrap { width:min(100% - 24px,1160px); } header { padding:36px 0 32px; } .kpi { padding:15px; } .chart-card { padding:16px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div class="eyebrow">Data exploration report</div>
+      <h1>Hotel Booking Trends</h1>
+      <p>Exploring booking patterns, cancellation behavior, and the factors associated with whether a reservation is kept or canceled.</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="toolbar">
+      <div class="status" id="loadStatus" aria-live="polite">Upload the booking CSV to generate the report.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <a class="upload" href="booking.csv" download="booking.csv" style="text-decoration:none">↓ Download CSV</a>
+        <label class="upload" for="csvFile">↑ Upload CSV</label>
+        <input id="csvFile" type="file" accept=".csv,text/csv" />
+      </div>
+    </div>
+    <div id="notice" class="notice"></div>
+    <div id="error"></div>
+
+    <section class="kpis" aria-label="Dataset summary">
+      <div class="card kpi"><div class="kpi-label">Total bookings</div><div class="kpi-value" id="totalBookings">—</div><div class="kpi-note">Reservations in the dataset</div></div>
+      <div class="card kpi"><div class="kpi-label">Cancellation rate</div><div class="kpi-value" id="cancelRate">—</div><div class="kpi-note">Share of all reservations</div></div>
+      <div class="card kpi"><div class="kpi-label">Average room price</div><div class="kpi-value" id="avgPrice">—</div><div class="kpi-note">Average listed price per night (dataset units)</div></div>
+      <div class="card kpi"><div class="kpi-label">Average lead time</div><div class="kpi-value" id="avgLead">—</div><div class="kpi-note">Days between booking and arrival</div></div>
+    </section>
+
+    <div class="section-title">
+      <h2>Booking and cancellation patterns</h2>
+      <p>How often are reservations canceled, and how does that vary across booking behavior?</p>
+    </div>
+    <section class="grid">
+      <article class="card chart-card">
+        <div class="chart-head"><div><h3>Booking status breakdown</h3><p>Share of reservations by final status</p></div></div>
+        <div class="chart-wrap"><canvas id="statusChart" role="img" aria-label="Doughnut chart showing canceled and non-canceled bookings"></canvas></div>
+        <div class="insight" id="statusInsight"></div>
+      </article>
+      <article class="card chart-card">
+        <div class="chart-head"><div><h3>Cancellation rate by lead time</h3><p>Lead time grouped into five ranges</p></div></div>
+        <div class="chart-wrap"><canvas id="leadChart" role="img" aria-label="Bar chart of cancellation rate by lead time"></canvas></div>
+        <div class="insight" id="leadInsight"></div>
+      </article>
+      <article class="card chart-card">
+        <div class="chart-head"><div><h3>Cancellation rate by market segment</h3><p>Percentage canceled within each segment</p></div></div>
+        <div class="chart-wrap"><canvas id="segmentChart" role="img" aria-label="Bar chart of cancellation rate by market segment"></canvas></div>
+        <div class="insight" id="segmentInsight"></div>
+      </article>
+      <article class="card chart-card">
+        <div class="chart-head"><div><h3>Cancellation rate by special requests</h3><p>Compare reservations with different request counts</p></div></div>
+        <div class="chart-wrap"><canvas id="requestsChart" role="img" aria-label="Bar chart of cancellation rate by number of special requests"></canvas></div>
+        <div class="insight" id="requestsInsight"></div>
+      </article>
+    </section>
+
+    <div class="section-title">
+      <h2>What stands out?</h2>
+      <p>A few observations generated directly from the uploaded data.</p>
+    </div>
+    <section class="bottom-grid">
+      <article class="card text-card">
+        <h3>Key findings</h3>
+        <ul class="findings" id="findings"><li>Upload a CSV file to see the findings.</li></ul>
+      </article>
+      <article class="card text-card">
+        <h3>Dataset notes</h3>
+        <p>This report summarizes associations in the supplied booking records. It does not establish that any one factor causes a cancellation.</p>
+        <p>Groups with very few bookings can produce extreme percentages. In particular, interpret results for rare special-request counts and small market segments cautiously.</p>
+        <p id="dateRange">Reservation date range: —</p>
+        <p id="dataQuality">Data quality: —</p>
+      </article>
+    </section>
+
+    <div class="section-title">
+      <h2>Market segment detail</h2>
+      <p>Booking volume and cancellation rate for each segment.</p>
+    </div>
+    <section class="card text-card table-wrap">
+      <table>
+        <thead><tr><th>Market segment</th><th>Bookings</th><th>Canceled</th><th>Cancellation rate</th></tr></thead>
+        <tbody id="segmentTable"><tr><td colspan="4">Upload a CSV file to see the results.</td></tr></tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer class="wrap">Hotel Booking Trends · Exploratory analysis · Built with HTML, Chart.js, and Papa Parse</footer>
+
+  <script>
+    const numberFmt = new Intl.NumberFormat("en-US");
+    const priceFmt = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const colors = { blue: "#4263eb", red: "#e05a67", green: "#199b78", gold: "#d69e36", gray: "#aab3c5" };
+    let charts = {};
+
+    function pct(n, d) { return d ? (100 * n / d) : 0; }
+    function mean(values) { return values.length ? values.reduce((a,b) => a+b,0) / values.length : 0; }
+    function cleanNumber(value) { const n = Number(value); return Number.isFinite(n) ? n : 0; }
+    function rateLabel(value) { return `${value.toFixed(1)}%`; }
+    function makeChart(id, config) {
+      if (charts[id]) charts[id].destroy();
+      charts[id] = new Chart(document.getElementById(id), config);
+    }
+    function baseOptions() {
+      return {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { usePointStyle: true, boxWidth: 8, color: "#667085", font: { family: "Inter, sans-serif" } } },
+          tooltip: { callbacks: { label: ctx => `${ctx.dataset.label || ctx.label}: ${Number(ctx.raw).toFixed(1)}%` } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: "#667085" } },
+          y: { beginAtZero: true, max: 100, grid: { color: "#edf0f5" }, ticks: { color: "#667085", callback: v => `${v}%` } }
+        }
+      };
+    }
+    function grouped(rows, keyFn) {
+      const out = new Map();
+      rows.forEach(row => {
+        const key = keyFn(row);
+        if (!out.has(key)) out.set(key, { total: 0, canceled: 0 });
+        const item = out.get(key);
+        item.total++;
+        if (row.status === "Canceled") item.canceled++;
+      });
+      return out;
+    }
+    function render(rows) {
+      const total = rows.length;
+      const canceled = rows.filter(r => r.status === "Canceled").length;
+      const kept = total - canceled;
+      const cancelPct = pct(canceled, total);
+      const avgPrice = mean(rows.map(r => r.price));
+      const avgLead = mean(rows.map(r => r.lead));
+
+      document.getElementById("totalBookings").textContent = numberFmt.format(total);
+      document.getElementById("cancelRate").textContent = rateLabel(cancelPct);
+      document.getElementById("avgPrice").textContent = priceFmt.format(avgPrice);
+      document.getElementById("avgLead").textContent = `${Math.round(avgLead)} days`;
+      document.getElementById("statusInsight").innerHTML =
+        `<strong>${numberFmt.format(canceled)}</strong> reservations (${rateLabel(cancelPct)}) were canceled; <strong>${numberFmt.format(kept)}</strong> were not canceled.`;
+
+      makeChart("statusChart", {
+        type: "doughnut",
+        data: { labels: ["Not canceled", "Canceled"], datasets: [{ data: [kept, canceled], backgroundColor: [colors.blue, colors.red], borderWidth: 0, hoverOffset: 5 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: "66%", plugins: { legend: { position: "bottom", labels: { usePointStyle: true, boxWidth: 8, padding: 18 } }, tooltip: { callbacks: { label: c => `${c.label}: ${numberFmt.format(c.raw)} (${rateLabel(pct(c.raw,total))})` } } } }
+      });
+
+      const leadGroups = [
+        { label: "0–7 days", test: n => n <= 7 },
+        { label: "8–30 days", test: n => n >= 8 && n <= 30 },
+        { label: "31–90 days", test: n => n >= 31 && n <= 90 },
+        { label: "91–180 days", test: n => n >= 91 && n <= 180 },
+        { label: "181+ days", test: n => n >= 181 }
+      ];
+      const leadStats = leadGroups.map(g => {
+        const subset = rows.filter(r => g.test(r.lead));
+        return { label: g.label, total: subset.length, rate: pct(subset.filter(r => r.status === "Canceled").length, subset.length) };
+      });
+      makeChart("leadChart", {
+        type: "bar",
+        data: { labels: leadStats.map(x => x.label), datasets: [{ label: "Cancellation rate", data: leadStats.map(x => x.rate), backgroundColor: colors.blue, borderRadius: 6, maxBarThickness: 42 }] },
+        options: { ...baseOptions(), plugins: { ...baseOptions().plugins, legend: { display: false }, tooltip: { callbacks: { label: c => `${rateLabel(c.raw)} · ${numberFmt.format(leadStats[c.dataIndex].total)} bookings` } } } }
+      });
+      const shortest = leadStats[0], longest = leadStats[leadStats.length - 1];
+      const leadDirection = longest.rate >= shortest.rate ? "higher" : "lower";
+      document.getElementById("leadInsight").innerHTML =
+        `The cancellation rate for bookings made 181+ days ahead is <strong>${rateLabel(longest.rate)}</strong>, compared with <strong>${rateLabel(shortest.rate)}</strong> for bookings made 0–7 days ahead. That is a ${leadDirection} rate in the longest lead-time group.`;
+
+      const segmentMap = grouped(rows, r => r.segment);
+      const segmentStats = [...segmentMap.entries()].map(([label,v]) => ({ label, total:v.total, canceled:v.canceled, rate:pct(v.canceled,v.total) })).sort((a,b) => b.rate-a.rate);
+      makeChart("segmentChart", {
+        type: "bar",
+        data: { labels: segmentStats.map(x => x.label), datasets: [{ label: "Cancellation rate", data: segmentStats.map(x => x.rate), backgroundColor: colors.green, borderRadius: 6, maxBarThickness: 48 }] },
+        options: { ...baseOptions(), plugins: { ...baseOptions().plugins, legend: { display: false }, tooltip: { callbacks: { label: c => `${rateLabel(c.raw)} · ${numberFmt.format(segmentStats[c.dataIndex].total)} bookings` } } } }
+      });
+      const majorSegments = segmentStats.filter(x => x.total >= 500);
+      const highestMajor = [...majorSegments].sort((a,b) => b.rate-a.rate)[0];
+      document.getElementById("segmentInsight").innerHTML = highestMajor
+        ? `<strong>${escapeHtml(highestMajor.label)}</strong> has the highest cancellation rate among segments with at least 500 bookings: <strong>${rateLabel(highestMajor.rate)}</strong> (${numberFmt.format(highestMajor.total)} bookings).`
+        : "Not enough segment data to identify a larger group.";
+
+      const requestMap = grouped(rows, r => String(r.requests));
+      const requestStats = [...requestMap.entries()].map(([label,v]) => ({ label, total:v.total, rate:pct(v.canceled,v.total) })).sort((a,b) => Number(a.label)-Number(b.label));
+      makeChart("requestsChart", {
+        type: "bar",
+        data: { labels: requestStats.map(x => x.label), datasets: [{ label: "Cancellation rate", data: requestStats.map(x => x.rate), backgroundColor: colors.gold, borderRadius: 6, maxBarThickness: 42 }] },
+        options: { ...baseOptions(), plugins: { ...baseOptions().plugins, legend: { display: false }, tooltip: { callbacks: { label: c => `${rateLabel(c.raw)} · ${numberFmt.format(requestStats[c.dataIndex].total)} bookings` } } } }
+      });
+      const zeroReq = requestStats.find(x => x.label === "0");
+      const onePlus = requestStats.filter(x => Number(x.label) >= 1 && x.total >= 100);
+      const bestReq = [...onePlus].sort((a,b) => a.rate-b.rate)[0];
+      document.getElementById("requestsInsight").innerHTML = zeroReq && bestReq
+        ? `Bookings with no special requests had a <strong>${rateLabel(zeroReq.rate)}</strong> cancellation rate. Among request groups with at least 100 bookings, the lowest rate was for <strong>${bestReq.label} request(s)</strong> (${rateLabel(bestReq.rate)}).`
+        : "Special-request groups vary in size; use the chart tooltips to see each group’s booking count.";
+
+      const findings = [];
+      findings.push(`<strong>${rateLabel(cancelPct)}</strong> of all bookings were canceled.`);
+      findings.push(`Longer booking lead times were associated with higher cancellation rates in this dataset.`);
+      if (highestMajor) findings.push(`The ${escapeHtml(highestMajor.label)} market segment had the highest cancellation rate among segments with at least 500 bookings.`);
+      if (zeroReq && bestReq) findings.push(`Bookings with at least one special request (in sufficiently large groups) generally had lower cancellation rates than bookings with none.`);
+      document.getElementById("findings").innerHTML = findings.map(x => `<li>${x}</li>`).join("");
+
+      document.getElementById("segmentTable").innerHTML = [...segmentStats].sort((a,b) => b.total-a.total).map(x =>
+        `<tr><td>${escapeHtml(x.label)}</td><td>${numberFmt.format(x.total)}</td><td>${numberFmt.format(x.canceled)}</td><td>${rateLabel(x.rate)}</td></tr>`
+      ).join("");
+
+      const dates = rows.map(r => r.date).filter(Boolean).map(s => {
+        const d = new Date(s);
+        return Number.isNaN(d.getTime()) ? null : d;
+      }).filter(Boolean).sort((a,b) => a-b);
+      document.getElementById("dateRange").textContent = dates.length
+        ? `Reservation date range: ${dates[0].toLocaleDateString()} – ${dates[dates.length-1].toLocaleDateString()}`
+        : "Reservation date range: unavailable";
+      document.getElementById("dataQuality").textContent = `Rows analyzed: ${numberFmt.format(total)}. Records with incomplete required fields were excluded.`;
+      document.getElementById("loadStatus").textContent = `Loaded ${numberFmt.format(total)} booking records successfully.`;
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[ch]));
+    }
+
+    function parseCsv(file) {
+      document.getElementById("error").innerHTML = "";
+      document.getElementById("notice").style.display = "none";
+      document.getElementById("loadStatus").textContent = "Reading booking data…";
+
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: true,
+        complete: result => {
+          const required = ["booking status", "lead time", "market segment type", "special requests", "average price", "date of reservation"];
+          const fields = result.meta.fields || [];
+          const missing = required.filter(x => !fields.includes(x));
+
+          if (missing.length) {
+            document.getElementById("loadStatus").textContent = "Could not load this dataset.";
+            document.getElementById("error").innerHTML = `<div class="error">The CSV is missing expected columns: ${missing.map(escapeHtml).join(", ")}.</div>`;
+            return;
+          }
+
+          const rows = result.data.map(r => ({
+            status: String(r["booking status"] || "").trim(),
+            lead: cleanNumber(r["lead time"]),
+            segment: String(r["market segment type"] || "Unknown").trim(),
+            requests: cleanNumber(r["special requests"]),
+            price: cleanNumber(r["average price"]),
+            date: String(r["date of reservation"] || "").trim()
+          })).filter(r => (r.status === "Canceled" || r.status === "Not_Canceled"));
+
+          if (!rows.length) {
+            document.getElementById("error").innerHTML = '<div class="error">No usable booking rows were found in the CSV.</div>';
+            document.getElementById("loadStatus").textContent = "No data loaded.";
+            return;
+          }
+
+          render(rows);
+
+          if (result.errors && result.errors.length) {
+            const n = result.errors.length;
+            document.getElementById("notice").style.display = "block";
+            document.getElementById("notice").textContent = `Note: the CSV parser reported ${n} formatting warning(s). The report uses the rows it could read.`;
+          }
+        },
+        error: err => {
+          document.getElementById("loadStatus").textContent = "Unable to read the CSV file.";
+          document.getElementById("error").innerHTML = `<div class="error">Could not read the selected CSV file (${escapeHtml(err.message || "unknown error")}). Please try selecting the file again.</div>`;
+        }
+      });
+    }
+
+    document.getElementById("csvFile").addEventListener("change", event => {
+      const file = event.target.files[0];
+      if (file) parseCsv(file);
+    });
+
+    // The report waits for the user to select a CSV file.
+  </script>
+</body>
+</html>
